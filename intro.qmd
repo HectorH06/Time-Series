@@ -65,10 +65,69 @@ tourism |>
 tourism |>
   filter(State == "Tasmania",
          Region == "East Coast") |>
+  mutate(Quarter = as.Date(Quarter)) |>
   write_csv("tasmania.csv")
+
+#tourism <- read_csv("./data/tasmania.csv")
 ```
 
 ```{r}
-tourism <- read_csv("./data/tasmania.csv")
-tourism
+tasmania <- tourism |>
+  filter(State == "Tasmania",
+         Region == "East Coast")
+tasmania
+```
+
+```{r}
+tasmania_comp <- tasmania |>
+  model(
+    dcmp_clasica = classical_decomposition(Trips)
+  ) |>
+  components()
+  
+tasmania_comp
+
+tasmania_comp |> 
+  autoplot()
+```
+
+```{r}
+tasmania_comp |> 
+  filter(Purpose == "Holiday") |> 
+  ggplot(aes(x = Quarter, y = Trips)) +
+  geom_line(color = "grey", size = 2) +
+  geom_line(aes(y = season_adjust), color = "dodgerblue", size = 2)
+  
+```
+
+```{r}
+aus_production |> 
+  model(STL(Gas, robust = TRUE)) |> 
+  components() |> 
+  ggplot(aes(x = Quarter, y = Gas)) +
+  geom_line(color = "grey", size = 1) +
+  geom_line(aes(y = trend), color = "firebrick", size = 1)
+
+aus_production |> 
+  model(STL(Gas, robust = TRUE)) |> 
+  components() |> 
+  ggplot(aes(x = Quarter, y = Gas)) +
+  geom_line(color = "grey", size = 1) +
+  geom_line(aes(y = season_adjust), color = "dodgerblue", size = 1)
+```
+
+```{r}
+tasmania |>
+  model(
+    STL(Trips - trend(window = 7) + season(window = 7), robust = FALSE)
+  ) |>
+  components() |>
+  autoplot()
+```
+
+```{r}
+aus_production |>
+  model(STL(log(Gas) - season(window = "periodic"), robust = TRUE)) |>
+  components() |>
+  autoplot()
 ```

@@ -1,0 +1,328 @@
+---
+title: "Descomposición de series de tiempo"
+author: "PBH"
+format: html
+---
+
+```{r}
+#| message: false
+
+library(tidyverse)
+library(fpp3)
+```
+
+tsibble
+
+## Tasmania
+
+```{r}
+tasmania <- tourism |> 
+  filter(State == "Tasmania",
+         Region == "East Coast")
+
+tasmania
+```
+
+```{r}
+#| warning: false
+tasmania |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  autoplot() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#| warning: false
+
+tasmania |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Holiday") |> 
+  autoplot()
+
+tasmania |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Business") |> 
+  autoplot()
+
+tasmania |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Visiting") |> 
+  autoplot()
+
+tasmania |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Other") |> 
+  autoplot()
+```
+
+```{r}
+aus_production |> 
+  autoplot(Gas)
+aus_production |> 
+  model(classical_decomposition(Gas, type = "multiplicative")) |> 
+  components() |> 
+  autoplot()
+```
+
+La función `model()` sirve para ajustar uno o más modelos a la(s) serie(s) de tiempo. Nos devuelve una tabla de modelos (`mable`).
+
+```{r}
+tasmania |> 
+  model(
+    dcmp_clasica = classical_decomposition(Trips)
+  )
+tasmania_comp <- tasmania |> 
+  model(
+    dcmp_clasica = classical_decomposition(Trips)
+  ) |> 
+  components()
+
+tasmania_comp
+
+tasmania_comp |> 
+  autoplot()
+```
+
+```{r}
+tasmania_comp |> 
+  filter(Purpose == "Holiday") |> 
+  ggplot(aes(x = Quarter, y = Trips)) +
+  geom_line(color = "grey", size = 2) +
+  geom_line(aes(y = season_adjust), color = "dodgerblue", size = 2)
+
+```
+
+## Victoria
+
+```{r}
+victoria <- tourism |> 
+  filter(State == "Victoria", Region == "Lakes")
+```
+
+```{r}
+#| warning: false
+
+victoria |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Holiday") |> 
+  autoplot()
+
+victoria |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Business") |> 
+  autoplot()
+
+victoria |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Visiting") |> 
+  autoplot()
+
+victoria |> 
+  model(classical_decomposition(Trips, type = "additive")) |>
+  components() |> 
+  filter(Purpose == "Other") |> 
+  autoplot()
+```
+
+## Gas
+
+```{r}
+aus_production |> 
+  autoplot(Gas)
+
+aus_production |> 
+  model(
+    stl = STL(Gas ~ trend(window = 39) + season())
+  ) |> 
+  components() |> 
+  autoplot()
+```
+
+## Descomposición STL
+
+```{r}
+tasmania |> 
+  filter(Purpose == "Holiday") |> 
+  model(
+    STL(Trips ~ trend(window = 11) + season(window = "periodic"), robust = TRUE)
+  ) |> 
+  components() |> 
+  autoplot()
+```
+
+```{r}
+aus_production |> 
+  autoplot(Gas)
+
+aus_production |> 
+  autoplot(log(Gas))
+
+aus_production |> 
+  model(STL(log(Gas) ~ season(window = "periodic"), robust = TRUE)) |> 
+  components() |> 
+  autoplot()
+```
+
+```{r}
+aus_production |> 
+  model(STL(Gas, robust = TRUE)) |> 
+  components() |> 
+  ggplot(aes(x = Quarter, y = Gas)) +
+  geom_line(color = "grey", size = 1) +
+  geom_line(aes(y = trend), color = "firebrick", size = 1)
+
+aus_production |> 
+  model(STL(Gas, robust = TRUE)) |> 
+  components() |> 
+  ggplot(aes(x = Quarter, y = Gas)) +
+  geom_line(color = "grey", size = 1) +
+  geom_line(aes(y = season_adjust), color = "dodgerblue", size = 1)
+```
+
+### Gráficas
+
+Gráfica de tiempo
+
+```{r}
+aus_production |> 
+  autoplot(Gas) +
+  geom_point()
+```
+
+Gráficas estacionales
+
+```{r}
+aus_production |> 
+  model(STL(Gas, robust = TRUE)) |> 
+  components() |>
+  mutate(sin_tend = season_year + remainder) |> 
+  gg_season(sin_tend)
+
+aus_production |> 
+  gg_season(Gas)
+```
+
+Gráfica de subseries
+
+```{r}
+aus_production |> 
+  gg_subseries(Gas)
+```
+
+```{r}
+aus_production |> 
+  gg_tsdisplay(Gas)
+```
+
+### Benchmark models
+
+```{r}
+gas_fit <- aus_production |> 
+  model(
+    media          = MEAN(Gas),
+    naive          = NAIVE(Gas),
+    seasonal_naive = SNAIVE(Gas),
+    drift          = NAIVE(Gas ~ drift())
+  )
+
+gas_fit
+```
+
+```{r}
+#| warning: false
+
+gas_aug <- gas_fit |> 
+  augment()
+gas_aug
+
+gas_aug |> 
+  autoplot(.innov) +
+  facet_wrap(vars(.model), scale = "free_y") +
+  theme(legend.position = "none")
+
+gas_aug |> 
+  group_by_key() |>
+  as_tibble() |> 
+  summarise(media = mean(.resid, na.rm = TRUE))
+```
+
+```{r}
+#| warning: false
+gas_fit |> 
+  select(seasonal_naive) |> 
+  gg_tsresiduals()
+```
+
+```{r}
+gas_aug |> 
+  features(.innov, ljung_box, lag = 8)
+```
+
+Pronósticos
+
+```{r}
+gas_fit |> 
+  forecast(h = "2 years") |> 
+  autoplot(aus_production) +
+  facet_wrap(vars(.model), scales = "free_y")
+```
+
+```{r}
+gas_fit2 <- aus_production |> 
+  model(
+    stlf = decomposition_model(
+      # especificar la descomposición
+      STL(log(Gas) ~ season(window = "periodic"), robust = TRUE),
+      # especificamos el modelo para la estacionalidad
+      SNAIVE(season_year),
+      RW(season_adjust ~ drift())
+    ),
+    stlf2 = decomposition_model(
+      STL(log(Gas) ~ season(window = "periodic"), robust = TRUE),
+      NAIVE(season_adjust)
+    )
+  )
+
+gas_fit2
+```
+
+```{r}
+#| warning: false
+gas_fit2 |> 
+  select(stlf) |>
+  gg_tsresiduals()
+
+gas_fit2 |> 
+  select(stlf2) |>
+  gg_tsresiduals()
+
+gas_fit2 |> 
+  augment() |> 
+  features(.innov, ljung_box, lag = 8)
+```
+
+```{r}
+gas_fit2 |> 
+  forecast(h = "5 years") |> 
+  autoplot(aus_production)
+```
+
+## Train/Test
+```{r}
+gas_train <- aus_production |>
+  filter_index(. ~ "2005 Q2")
+```
+
+```{r}
+gas_fcst <- gas_fit2
+  
+```
+
