@@ -14,6 +14,14 @@ When you click the **Render** button a document will be generated that includes 
 
 ```{r}
 library(tidyverse)
+library(tsibble)
+library(fable)
+library(fabletools)
+library(feasts)
+library(lubridate)
+library(slider)
+library(plotly)
+
 library(randomForest)
 ```
 
@@ -254,7 +262,7 @@ rf_results |> ggplot(aes(x = date)) +
   geom_line(aes(y = predicted, color = "Predicted")) +
   ggtitle("Random Forest Predictions")
 
-# pura experimentación, no creo que sea adecuado utilizarlo para predecir este tipo de movimientos
+# pura experimentación, no sé si sea adecuado utilizarlo para predecir este tipo de movimientos 
 rf_metrics <- tibble(
   .model = "Random Forest",
   MAPE = mean(abs((rf_results$actual - rf_results$predicted) / rf_results$actual)) * 100,
@@ -308,4 +316,8 @@ accuracy_comparison
 ```
 
 
-Nos gustaba más el Seasonal ARIMA para un resultado mejor pero los resultados son iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia. Implementamos cross validation en un arima pero los resultados fueron bastante peores. De igual manera experimentamos con random forest para ver qué tan accurate resultaba ser. Nos sorprendió la precisión, pero como vimos la función en un foro de reddit no supimos cómo adaptarlo para que se viera de la misma manera que las otras gráficas. El ETS no fue mejor que los arimas, no lo conozco bien pero según chatgpt no debe descartarse como una buena opción.
+Nos gustaba más el Seasonal ARIMA para un resultado mejor pero los resultados son iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia. Los ARIMA son buenos porque fueron diseñados tal cual para manejar dependencias temporales y cómo los datos del pasado influyen en el futuro. Implementamos cross validation en un arima pero los resultados fueron bastante peores. 
+
+De igual manera experimentamos con random forest para ver qué tan accurate resultaba ser. Nos sorprendió la precisión, pero como vimos la función en un foro de reddit (en el cual por cierto indicaba que era particularmente bueno para situaciones con valores faltantes no reparables) no supimos cómo adaptarlo para que se viera de la misma manera que las otras gráficas, hasta donde sé es un tanto riesgoso en este tipo de predicciones porque al no necesitar estacionalidad y no tener fuertes relaciones lineales, no hace caso a la estructura secuencial de los datos. 
+
+El ETS no fue mejor que los arimas, no lo conozco bien pero según chatgpt no debe descartarse como una buena opción porque es bueno con tendencias y valores estacionales. Si no podemos quedarnos con random forest elegiríamos ARIMA, creemos que SARIMA regresa datos iguales porque aunque hay tendencia, la estacionalidad no es fuertísima.
