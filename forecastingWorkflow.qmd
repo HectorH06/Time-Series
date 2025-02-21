@@ -1,0 +1,255 @@
+---
+title: "forecastingWorkflow"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+library(tidyverse)
+```
+
+You can add options to executable code like this
+
+```{r}
+gdp <- tidyquant::tq_get(
+  x    = "NGDPRNSAXDCMXQ",
+  get  = "economic.data",
+  from = "1997-01-01"
+)
+
+gdp
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+gdp <- gdp |> 
+  mutate(date = yearquarter(date)) |> 
+  as_tsibble(
+    index = date,
+    key   = symbol
+  )
+
+gdp
+```
+
+```{r}
+gdp_train <- gdp |> 
+  filter_index(. ~ "2020 Q4")
+
+gdp_train
+```
+
+```{r}
+p <- gdp_train |> 
+  autoplot(price) +
+  labs(
+    title = "Time series plot of the Real GDP for Mexico",
+    y = "GDP"
+  )
+ 
+ggplotly(p, dynamicTicks = TRUE) |> 
+  rangeslider()
+```
+
+```{r}
+gdp_train |> 
+  gg_season(price) |> 
+  ggplotly()
+```
+
+```{r}
+gdp_train |> 
+  model(stl = STL(price, robust = TRUE)) |> 
+  components() |> 
+  autoplot() |> 
+  ggplotly()
+```
+
+```{r}
+gdp_train |> 
+  autoplot(log(price)) +
+  ggtitle("Log of the Real GDP of Mexico")
+```
+
+```{r}
+gdp_train |> 
+  model(stl = STL(log(price) ~ season(window = "periodic"), robust = TRUE)) |> 
+  components() |> 
+  autoplot() |> 
+  ggplotly()
+```
+
+```{r}
+gdp_fit <- gdp_train |> 
+  model(
+    snaive = SNAIVE(log(price)),
+    drift  = RW(log(price) ~ drift())
+  )
+```
+
+```{r}
+gdp_fit |> 
+  select(snaive) |> 
+  gg_tsresiduals() +
+  ggtitle("Residuals Diagnostics for the Seasonal Naïve Model")
+```
+
+```{r}
+gdp_fit |> 
+  select(drift) |> 
+  gg_tsresiduals() +
+  ggtitle("Residuals Diagnostics for the Drift Model")
+```
+
+```{r}
+gdp_fit |> 
+  augment() |> 
+  features(.innov, ljung_box, lag = 24, dof = 0)
+```
+
+```{r}
+gdp_train_accu <- accuracy(gdp_fit) |> 
+  arrange(MAPE)
+gdp_train_accu |> 
+  select(symbol:.type, MAPE, RMSE, MAE, MASE)
+```
+
+```{r}
+gdp_fit_dcmp <- gdp_train |> 
+      model(
+        stlf = decomposition_model(
+          STL(log(price) ~ season(window = "periodic"), robust = TRUE),
+          RW(season_adjust ~ drift())
+        )
+      )
+
+gdp_fit_dcmp
+```
+
+```{r}
+gdp_fit <- gdp_fit |> 
+  left_join(gdp_fit_dcmp)
+```
+
+```{r}
+gdp_fit |> 
+  accuracy() |> 
+  select(symbol:.type, MAPE, RMSE, MAE, MASE) |> 
+  arrange(MAPE)
+```
+
+```{r}
+gdp_fit |> 
+  select(stlf) |> 
+  gg_tsresiduals()
+```
+
+```{r}
+gdp_fit |> 
+  augment() |> 
+  features(.innov, ljung_box)
+```
+
+```{r}
+gdp_fc <- gdp_fit |> 
+  forecast(h = 6) 
+
+gdp_fc
+```
+
+```{r}
+gdp_fc |> 
+  autoplot(gdp) +
+  facet_wrap(~.model, ncol = 1)
+```
+
+```{r}
+gdp_fc |> 
+  filter(.model == "stlf") |> 
+  autoplot(gdp)
+```
+
+```{r}
+gdp_fc |> 
+  accuracy(gdp) |> 
+  select(.model:.type, MAPE, RMSE, MAE, MASE) |> 
+  arrange(MAPE)
+```
+
+```{r}
+gdp_fit2 <- gdp |> 
+  model(
+    stlf = decomposition_model(
+          STL(log(price) ~ season(window = "periodic"), robust = TRUE),
+          RW(season_adjust ~ drift())
+        )
+  )
+gdp_fit2
+```
+
+```{r}
+gdp_fc_fut <- gdp_fit2 |> 
+  forecast(h = "3 years")
+gdp_fc_fut
+```
+
+```{r}
+gdp_fc_fut |> 
+  autoplot(gdp)
+```
+
+### **ARIMA con Parámetros Específicos**
+```{r}
+gdp_fit_arima_manual <- gdp |> 
+  model(
+    arima_manual = ARIMA(log(price) ~ pdq(2,1,2) + PDQ(1,1,1))
+  )
+gdp_fit_arima_manual
+```
+
+```{r}
+gdp_fc_arima_manual <- gdp_fit_arima_manual |> 
+  forecast(h = "3 years")
+gdp_fc_arima_manual |> autoplot(gdp)
+```
+
+### **SARIMA (ARIMA con Estacionalidad)**
+```{r}
+gdp_fit_sarima <- gdp |> 
+  model(
+    sarima = ARIMA(log(price) ~ pdq(2,1,2) + PDQ(1,1,1, period = 4))
+  )
+gdp_fit_sarima
+```
+
+```{r}
+gdp_fc_sarima <- gdp_fit_sarima |> 
+  forecast(h = "3 years")
+gdp_fc_sarima |> autoplot(gdp)
+```
+
+### **Comparación de Modelos**
+```{r}
+accuracy_comparison <- bind_rows(
+  #accuracy(gdp_fit_arima_auto),
+  accuracy(gdp_fit_arima_manual),
+  accuracy(gdp_fit_sarima)
+) |> 
+  select(.model, MAPE, RMSE, MAE) |> 
+  arrange(MAPE)
+
+accuracy_comparison
+```
+
+Nos gustó más el Seasonal ARIMA para un resultado mejor pero honestamente los resultados se ven prácticamente iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia.
+
+
