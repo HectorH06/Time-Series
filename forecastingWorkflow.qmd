@@ -14,6 +14,7 @@ When you click the **Render** button a document will be generated that includes 
 
 ```{r}
 library(tidyverse)
+library(randomForest)
 ```
 
 You can add options to executable code like this
@@ -207,6 +208,61 @@ gdp_fc_fut |>
   autoplot(gdp)
 ```
 
+## **Cross Validation**
+```{r}
+gdp_cv <- gdp |> 
+  stretch_tsibble(.init = 60, .step = 4)
+
+cv_results <- gdp_cv |> 
+  model(
+    arima_cv = ARIMA(log(price))
+  ) |> 
+  forecast(h = 4) |> 
+  accuracy(gdp)
+
+cv_results |> select(.model, MAPE, RMSE, MAE) |> arrange(MAPE)
+```
+
+## **ETS Model**
+```{r}
+gdp_fit_ets <- gdp |> 
+  model(ets = ETS(log(price)))
+
+gdp_fc_ets <- gdp_fit_ets |> 
+  forecast(h = "3 years")
+gdp_fc_ets |> autoplot(gdp)
+```
+
+## **Randy del Bosque**
+```{r}
+gdp_rf_data <- gdp |> 
+  mutate(lag1 = lag(price, 1), lag2 = lag(price, 2)) |> 
+  drop_na()
+
+rf_model <- randomForest(price ~ lag1 + lag2, data = as_tibble(gdp_rf_data), na.action = na.omit)
+
+rf_predictions <- predict(rf_model, newdata = as_tibble(gdp_rf_data))
+
+rf_results <- tibble(
+  date = gdp_rf_data$date,
+  actual = gdp_rf_data$price,
+  predicted = rf_predictions
+)
+
+rf_results |> ggplot(aes(x = date)) +
+  geom_line(aes(y = actual, color = "Actual")) +
+  geom_line(aes(y = predicted, color = "Predicted")) +
+  ggtitle("Random Forest Predictions")
+
+# pura experimentación, no creo que sea adecuado utilizarlo para predecir este tipo de movimientos
+rf_metrics <- tibble(
+  .model = "Random Forest",
+  MAPE = mean(abs((rf_results$actual - rf_results$predicted) / rf_results$actual)) * 100,
+  RMSE = sqrt(mean((rf_results$actual - rf_results$predicted)^2)),
+  MAE = mean(abs(rf_results$actual - rf_results$predicted))
+)
+```
+
 ### **ARIMA con Parámetros Específicos**
 ```{r}
 gdp_fit_arima_manual <- gdp |> 
@@ -240,9 +296,10 @@ gdp_fc_sarima |> autoplot(gdp)
 ### **Comparación de Modelos**
 ```{r}
 accuracy_comparison <- bind_rows(
-  #accuracy(gdp_fit_arima_auto),
   accuracy(gdp_fit_arima_manual),
-  accuracy(gdp_fit_sarima)
+  accuracy(gdp_fit_sarima),
+  accuracy(gdp_fit_ets),
+  rf_metrics
 ) |> 
   select(.model, MAPE, RMSE, MAE) |> 
   arrange(MAPE)
@@ -250,6 +307,5 @@ accuracy_comparison <- bind_rows(
 accuracy_comparison
 ```
 
-Nos gustó más el Seasonal ARIMA para un resultado mejor pero honestamente los resultados se ven prácticamente iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia.
 
-
+Nos gustaba más el Seasonal ARIMA para un resultado mejor pero los resultados son iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia. Implementamos cross validation en un arima pero los resultados fueron bastante peores. De igual manera experimentamos con random forest para ver qué tan accurate resultaba ser. Nos sorprendió la precisión, pero como vimos la función en un foro de reddit no supimos cómo adaptarlo para que se viera de la misma manera que las otras gráficas. El ETS no fue mejor que los arimas, no lo conozco bien pero según chatgpt no debe descartarse como una buena opción.
