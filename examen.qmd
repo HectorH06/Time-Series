@@ -1,0 +1,50 @@
+---
+title: "examen"
+format: html
+editor: visual
+---
+
+### **1**
+
+## 1. La prueba de Ljung-Box es útil para escoger un buen modelo de pronóstico.
+La prueba de Ljung-Box sirve más que nada para determinar la autocorrelación en una serie de tiempo, siendo esto así, nos puede ayudar a saber si ciertos modelos sirven o no, como descartar los estacionales y optar por otros. Dicho esto, sí sirve para escoger un buen modelo de pronóstico, incluso para indicar si deben realizarse más procesos sobre la serie antes de llegar a conclusiones.
+
+## 2. El MAPE es mejor que el RMSE para medir la precisión de un pronóstico, porque es más fácil de explicar.
+Falso, el MAPE es mejor para comparar modelos entre sí debido a que es porcentual, pero la precisión de un pronóstico puede ser medida de mejor manera por otro tipo de medidas de error como RMSE. Por ejemplo, al momento de utilizar modelos de predicción, si los conjuntos de datos para dos modelos distintos indican escalas distintas (uno cuyos valores estén en centenas y otro cuyos valores estén en decenas), casi cualquier medida de error va a indicar un error menor en el modelo que indica decenas, pues son valores menores, mas no por eso es mejor modelo. Sin embargo, por eso se utiliza MAPE, para comparar modelos, incluso si no puede medir error cero porque no es posible dividir entre cero. RMSE mide de mejor manera el error para la precisión de un pronóstico.
+
+## 4. Si los residuos del modelo no son ruido blanco, entonces no se puede hacer pronósticos.
+No es aconsejable porque el modelo está sesgado, en dicho caso hay factores que no se están teniendo en cuenta y que están afectando la predicción de la serie, hay pruebas para determinar si una serie está autocorrelacionada y a partir de eso se puede determinar de mejor manera si vale o no la pena hacerle caso a un modelo en el que hay residuos que no son ruido blanco.
+
+## 5. Una serie que presenta estacionalidad es más difícil de pronosticar que una que no tiene
+patrones estacionales.
+Al contrario, las series con estacionalidad son más fáciles de pronosticar porque generalmente ya se conocen sus patrones y "hábitos", se sabe qué tendencia pueden tomar con mayor facilidad y pueden hacerse más específicas para encontrar ciclos dentro de esa misma estacionalidad, además el tiempo es algo constante y facilita su análisis en diferentes medidas. Las que no tienen patrones estacionales suelen tener un pronóstico más complejo, incluso teniendo una tendencia, no se tiene la certeza de sus patrones. A pesar de todo, no hay que dejarse llevar por la estacionalidad, para hacer el mejor pronóstico hay que saber si hay ruido y desestacionalizar la serie para analizar mejor la variable en cuestión.
+
+
+
+### **2**
+
+## 1. 
+Es interesante ver en la figura 1 cómo el movimiento se detuvo de golpe y sin aviso, se veía una pequeña "normalidad" por encima del 0% a inicios del 2020 y luego simplemente se cayó casi en picada. Según parece el punto más bajo (exceptuando días festivos) fue a finales del primer cuarto de 2020, la tendencia aún así fue hacia arriba, poco a poco, se puede notar cómo el movimiento variaba mucho más entre días, la distancia entre el mínimo y el máximo es como de 3 o 4 veces más que en el pequeño fragmento que vemos al inicio de la serie (sin pandemia). Se ven claramente navidad y año nuevo, al final de cada año, hay otros días festivos que no logro identificar a finales del tercer cuarto y a mediados del 4to. Hace cambio de nivel hacia abajo cada año nuevo, probablemente tenga que ver con enero, vacaciones o algo similar. Creo que ya me extendí mucho pero en la figura 2 se nota cómo la movilidad en fines de semana tuvo aunque sea un poco menos impacto que de lunes a viernes, ¿dice algo de nuestras prioridades?
+
+## 2. 
+La primera muestra el cambio porcentual, que claro que se disparó al transformar tan irregularmente los hábitos de movilidad de la población. Luego tenemos la tendencia, que muestra una tendencia creciente bastante clara, nótese que va desde -0.3 hasta 0.1 (detalle importante porque estando tan abajo lo más normal es volver a subir). La estacionalidad semanal muestra constancia entre días, similar a la figura 2. El residuo se comportó muy raro y con picos hacia abajo muy marcados (fechas festivas y ciclos escolares), no sabría muy bien qué decir respecto a los outliers hacia arriba sin ver más. No aplicaría una transformación logarítmica, los datos están bien así, aparte no se puede con 0.
+
+## 3.
+
+## a) 
+El seasonal naive estaría bien porque la movilidad de las personas depende precisamente del día o de la hora. No habría un error tan grande, pero tal vez sufriría con fechas especiales o temporadas cambiantes.
+
+## b) 
+El naive normal sí sería mala opción porque no tienes la misma movilidad un miércoles que un viernes o sábado por ejemplo. Replicar solo el último valor sería un error.
+
+## c)
+La primera parte con snaive suena bien porque determinas tendencia con la STL, pero no sé si drift para la serie desestacionalizada sea lo mejor, quizá el rango de valores en la predicción se ampliaría como en un cono.
+
+## d)
+No creo que los datos requieran una transformación logarítmica, comenzando por eso no lo haría, igual que en el punto 2.2 de este examen si la movilidad puede ser 0 o menor, pues no aplica.
+
+## e)
+No me lo imagino, creo que tendría que ver los datos y hacer pruebas para obtener estacionalidad, residuo y todo eso.
+
+### **3**
+No, y mucho menos con el tipo de modelos que hemos visto, son muy inestables y libres de estacionalidad. Puede que haya tendencia pero ni siquiera eso está garantizado, los hiperparámetros que determinan ese tipo de series son tantos que por algo se le denomina estocástico. Igual tal vez con ML o modelos mucho más avanzados se podrían hacer mejores estimaciones, pero nada es certero.

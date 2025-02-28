@@ -1,0 +1,21 @@
+---
+title: "suavizacionExponencial"
+format: html
+editor: visual
+---
+
+## Suavización Exponencial
+
+```{=latex}
+$$
+0 < \alpha < 1
+$$
+
+$$
+n=0
+$$
+
+$$
+\hat{y} = \left( \alpha \left( 1 - \alpha \right)^n \right) y_{t-n}
+$$
+```
