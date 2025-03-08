@@ -1,0 +1,26 @@
+---
+title: "arima"
+format: html
+editor: visual
+---
+
+```{r}
+
+
+library(tidyverse)
+library(fpp3)
+```
+
+```{r}
+mex |>
+  filter(Country == "Mexico")
+
+mex |>
+  autoplot(population)
+
+```
+
+```{r}
+mex |>
+  features(Population, unitroot_ndiffs())
+```
