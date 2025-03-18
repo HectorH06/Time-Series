@@ -1,7 +1,8 @@
 ---
 title: "Descomposición de series de tiempo"
-format: html
-editor: visual
+format: 
+  html: 
+    embed-resources: true
 ---
 
 ```{r}
@@ -619,4 +620,75 @@ gas_fcst4 |>
 gas_fcst4 |> 
   accuracy(aus_production) |> 
   arrange(MAPE)
+```
+
+
+```{r}
+fit_ets <- tasmania |> 
+  model(ETS(Trips ~ error("A") + trend("A") + season("A")))
+
+forecast_ets <- fit_ets |> forecast(h = "2 years")
+autoplot(tasmania, Trips) + 
+  autolayer(forecast_ets)
+
+
+```
+
+```{r}
+fit_arima <- tasmania |> 
+  model(ARIMA(Trips ~ pdq(1,1,1) + PDQ(0,1,0)))
+
+forecast_arima <- fit_arima |> forecast(h = "2 years")
+autoplot(tasmania, Trips) + 
+  autolayer(forecast_arima)
+```
+
+```{r}
+accuracy(fit_ets)
+accuracy(fit_arima)
+```
+```{r}
+gas_train <- aus_production |> 
+  filter_index(. ~ "2005 Q2") |> 
+  select(Quarter, Gas)
+```
+```{r}
+fit_ets_gas <- gas_train |> 
+  model(ETS(Gas))
+
+fit_arima_gas <- gas_train |> 
+  model(ARIMA(Gas))
+```
+```{r}
+fit_drift_gas <- gas_train |> 
+  model(RW(Gas ~ drift()))
+
+accuracy(fit_drift_gas)
+accuracy(fit_ets_gas)
+accuracy(fit_arima_gas)
+```
+
+```{r}
+forecast_ets_gas <- fit_ets_gas |> forecast(h = "2 years")
+forecast_arima_gas <- fit_arima_gas |> forecast(h = "2 years")
+forecast_drift_gas <- fit_drift_gas |> forecast(h = "2 years")
+
+autoplot(gas_train, Gas) +
+  autolayer(forecast_ets_gas, series = "ETS", PI = TRUE) +
+  ggtitle("ETS") +
+  ylab("Consumo de Gas") +
+  xlab("Q1")
+
+autoplot(gas_train, Gas) +
+  autolayer(forecast_arima_gas, series = "ARIMA", PI = TRUE) +
+  ggtitle("ARIMA") +
+  ylab("Consumo de Gas") +
+  xlab("Q1")
+  
+autoplot(gas_train, Gas) +
+  autolayer(forecast_drift_gas, series = "Drift", PI = TRUE) +
+  ggtitle("Drift zZzzZ") +
+  ylab("Consumo de Gas") +
+  xlab("Q1")
+
 ```

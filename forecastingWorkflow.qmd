@@ -217,6 +217,7 @@ gdp_fc_fut |>
 ```
 
 ## **Cross Validation**
+
 ```{r}
 gdp_cv <- gdp |> 
   stretch_tsibble(.init = 60, .step = 4)
@@ -232,6 +233,7 @@ cv_results |> select(.model, MAPE, RMSE, MAE) |> arrange(MAPE)
 ```
 
 ## **ETS Model**
+
 ```{r}
 gdp_fit_ets <- gdp |> 
   model(ets = ETS(log(price)))
@@ -242,6 +244,7 @@ gdp_fc_ets |> autoplot(gdp)
 ```
 
 ## **Randy del Bosque**
+
 ```{r}
 gdp_rf_data <- gdp |> 
   mutate(lag1 = lag(price, 1), lag2 = lag(price, 2)) |> 
@@ -272,6 +275,7 @@ rf_metrics <- tibble(
 ```
 
 ### **ARIMA con Parámetros Específicos**
+
 ```{r}
 gdp_fit_arima_manual <- gdp |> 
   model(
@@ -287,6 +291,7 @@ gdp_fc_arima_manual |> autoplot(gdp)
 ```
 
 ### **SARIMA (ARIMA con Estacionalidad)**
+
 ```{r}
 gdp_fit_sarima <- gdp |> 
   model(
@@ -302,6 +307,7 @@ gdp_fc_sarima |> autoplot(gdp)
 ```
 
 ### **Comparación de Modelos**
+
 ```{r}
 accuracy_comparison <- bind_rows(
   accuracy(gdp_fit_arima_manual),
@@ -315,9 +321,8 @@ accuracy_comparison <- bind_rows(
 accuracy_comparison
 ```
 
+Nos gustaba más el Seasonal ARIMA para un resultado mejor pero los resultados son iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia. Los ARIMA son buenos porque fueron diseñados tal cual para manejar dependencias temporales y cómo los datos del pasado influyen en el futuro. Implementamos cross validation en un arima pero los resultados fueron bastante peores.
 
-Nos gustaba más el Seasonal ARIMA para un resultado mejor pero los resultados son iguales para el arima y el sarima, el arima auto no nos gustó porque el resultado seguía siendo muy cónico y se abría demasiado hacia arriba por la misma tendencia. Los ARIMA son buenos porque fueron diseñados tal cual para manejar dependencias temporales y cómo los datos del pasado influyen en el futuro. Implementamos cross validation en un arima pero los resultados fueron bastante peores. 
-
-De igual manera experimentamos con random forest para ver qué tan accurate resultaba ser. Nos sorprendió la precisión, pero como vimos la función en un foro de reddit (en el cual por cierto indicaba que era particularmente bueno para situaciones con valores faltantes no reparables) no supimos cómo adaptarlo para que se viera de la misma manera que las otras gráficas, hasta donde sé es un tanto riesgoso en este tipo de predicciones porque al no necesitar estacionalidad y no tener fuertes relaciones lineales, no hace caso a la estructura secuencial de los datos. 
+De igual manera experimentamos con random forest para ver qué tan accurate resultaba ser. Nos sorprendió la precisión, pero como vimos la función en un foro de reddit (en el cual por cierto indicaba que era particularmente bueno para situaciones con valores faltantes no reparables) no supimos cómo adaptarlo para que se viera de la misma manera que las otras gráficas, hasta donde sé es un tanto riesgoso en este tipo de predicciones porque al no necesitar estacionalidad y no tener fuertes relaciones lineales, no hace caso a la estructura secuencial de los datos.
 
 El ETS no fue mejor que los arimas, no lo conozco bien pero según chatgpt no debe descartarse como una buena opción porque es bueno con tendencias y valores estacionales. Si no podemos quedarnos con random forest elegiríamos ARIMA, creemos que SARIMA regresa datos iguales porque aunque hay tendencia, la estacionalidad no es fuertísima.
