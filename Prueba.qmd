@@ -1,0 +1,71 @@
+---
+title: "DemandElec"
+format: html
+editor: visual
+---
+
+## Quarto
+
+```{r}
+install.packages("fable")
+```
+
+```{r}
+
+
+#| message: false
+library(tidyverse)
+library(fpp3)
+library(plotly)
+library(feasts)
+library(fabletools)
+library(fable)
+
+# Carga y preparación de datos
+elec <- vic_elec |> 
+  index_by(Hour = ~ lubridate::floor_date(., "1 hour")) |> 
+  summarise(
+    Demand = sum(Demand),
+    Temperature = mean(Temperature),
+    Holiday = any(Holiday)
+  ) |> 
+  mutate(hora = hour(Hour))
+
+elec_train <- elec |> filter_index(. ~ "2014-10-31")
+elec_test <- elec |> filter_index("2014-11-01" ~ .)
+
+# Asegurarse de que es tsibble con frecuencia definida
+elec_train <- elec_train |> as_tsibble(index = Hour)
+
+# Visualización inicial
+p <- elec_train |> autoplot(Demand, color = "darkorange2")
+ggplotly(p, dynamicTicks = TRUE) |> rangeslider()
+
+# Fourier para modelar estacionalidad
+fourier_terms <- fourier(elec_train, K = 3)
+elec_train_fourier <- bind_cols(elec_train, fourier_terms)
+
+# Modelos: STL + TSLM, ARIMAX, Fourier + TSLM
+models <- elec_train_fourier |> 
+  model(
+    STL_TSLM = decomposition_model(
+      STL(Demand ~ season(window = "periodic")),
+      TSLM(season_adjust ~ Temperature + I(Temperature^2) + Holiday)
+    ),
+    ARIMAX = ARIMA(Demand ~ Temperature + Holiday),
+    Fourier_TSLM = TSLM(Demand ~ Temperature + I(Temperature^2) + Holiday + sin1 + cos1 + sin2 + cos2 + sin3 + cos3)
+  )
+
+# Evaluación de modelos
+fcst <- models |> forecast(elec_test)
+fcst |> accuracy(elec_test)
+
+# Pronóstico
+fcst |> 
+  autoplot(elec, level = NULL) +
+  labs(title = "Comparación de modelos de demanda eléctrica")
+
+# Diagnóstico de residuos
+models |> gg_tsresiduals(lag_max = 72)
+
+```
