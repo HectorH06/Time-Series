@@ -1,0 +1,204 @@
+---
+title: "proyecto_final3"
+format: html
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+load("proyecto_final.RData")
+
+# Verificar que el objeto 'train_hora' está cargado
+head(train_hora)
+
+# Revisar si la columna 'fecha' tiene algún formato incorrecto
+unique(train_hora$fecha)
+
+# Convertir la columna 'fecha' a tipo Date (en formato datetime), manejando el caso de hora 0
+# Si la hora está en formato "2020-10-08", la agregamos como medianoche "2020-10-08 00:00:00"
+train_hora$fecha <- as.character(train_hora$fecha)
+train_hora$fecha <- ifelse(nchar(train_hora$fecha) == 10, paste0(train_hora$fecha, " 00:00:00"), train_hora$fecha)
+
+# Ahora convertir la columna 'fecha' a tipo POSIXct (fecha y hora)
+train_hora$fecha <- ymd_hms(train_hora$fecha)
+
+# Verificar que la conversión fue exitosa
+head(train_hora)
+
+# Extraer el día de la semana y la hora
+train_hora$dia_semana <- wday(train_hora$fecha, label = TRUE)  # Usamos 'label = TRUE' para mostrar los días como abreviaciones
+train_hora$hora <- hour(train_hora$fecha)
+
+# Calcular el promedio por folio
+train_hora <- train_hora %>%
+  mutate(promedio_por_folio = ifelse(folio == 0, 0, total / folio))
+
+# Verificar el resultado
+head(train_hora)
+
+
+# Calcular los quintiles para cada día de la semana y cada hora
+quintiles_por_dia <- train_hora %>%
+  group_by(dia_semana, hora) %>%
+  summarise(
+    count = n(),
+    mean = mean(total, na.rm = TRUE),
+    std = sd(total, na.rm = TRUE),
+    min = min(total, na.rm = TRUE),
+    `20%` = quantile(total, 0.20, na.rm = TRUE),
+    `40%` = quantile(total, 0.40, na.rm = TRUE),
+    `50%` = quantile(total, 0.50, na.rm = TRUE),
+    `60%` = quantile(total, 0.60, na.rm = TRUE),
+    `80%` = quantile(total, 0.80, na.rm = TRUE),
+    max = max(total, na.rm = TRUE),
+    promedio_por_folio = mean(promedio_por_folio, na.rm = TRUE)  # Promedio por folio por hora
+  )
+
+# Crear la gráfica para cada día de la semana
+ggplot(quintiles_por_dia, aes(x = hora)) +
+  geom_line(aes(y = `20%`, color = "20%"), size = 1) +
+  geom_line(aes(y = `40%`, color = "40%"), size = 1) +
+  geom_line(aes(y = `50%`, color = "50%"), size = 1) +
+  geom_line(aes(y = `60%`, color = "60%"), size = 1) +
+  geom_line(aes(y = `80%`, color = "80%"), size = 1) +
+  geom_line(aes(y = promedio_por_folio, color = "Promedio por Folio"), size = 1, linetype = "dashed") +
+  facet_wrap(~dia_semana, scales = "free_y") +  # Crear un panel para cada día de la semana
+  labs(
+    title = "Quintiles por Hora y Promedio por Folio por Día de la Semana",
+    x = "Hora del Día",
+    y = "Valor",
+    color = "Leyenda"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("20%" = "blue", "40%" = "green", "50%" = "orange", "60%" = "red", "80%" = "purple", "Promedio por Folio" = "black"))
+
+```
+```{r}
+colSums(is.na(train_hora))
+
+```
+
+
+```{r}
+# Filtrar los datos solo entre las 9:00 AM y las 7:00 PM (hora entre 9 y 19)
+train_hora_filtrada <- train_hora %>%
+  filter(hora >= 9 & hora <= 19)
+
+# Calcular el IQR para cada día de la semana y cada hora (solo para las horas entre 9 y 19)
+train_hora_extremos <- train_hora_filtrada %>%
+  group_by(dia_semana, hora) %>%
+  summarise(
+    Q1 = quantile(total, 0.25, na.rm = TRUE),
+    Q3 = quantile(total, 0.75, na.rm = TRUE),
+    IQR = Q3 - Q1,
+    min = min(total, na.rm = TRUE),
+    max = max(total, na.rm = TRUE)
+  )
+
+# Identificar los valores extremos (fuera de 3 * IQR) solo para las horas entre 9 y 19
+train_hora_filtrada <- train_hora_filtrada %>%
+  left_join(train_hora_extremos, by = c("dia_semana", "hora")) %>%
+  mutate(
+    es_extremo = (total < (Q1 - 3 * IQR)) | (total > (Q3 + 3 * IQR))
+  )
+
+# Rellenar los valores extremos con ARIMA
+# Vamos a reemplazar los valores extremos con las predicciones de ARIMA solo en los datos filtrados
+
+# Filtrar las filas con valores extremos
+extremos <- train_hora_filtrada %>% filter(es_extremo == TRUE)
+
+# Crear una serie de tiempo por cada día y hora (si hay más de un valor por hora, seleccionamos el promedio)
+series_temporales <- extremos %>%
+  group_by(dia_semana, hora) %>%
+  summarise(total_promedio = mean(total, na.rm = TRUE))
+
+# Aplicar ARIMA por cada grupo (hora y día)
+fill_arima <- function(data) {
+  ts_data <- ts(data$total_promedio, frequency = 24)  # Frecuencia diaria (cada hora)
+  model <- auto.arima(ts_data)
+  forecasted <- forecast(model, h = 1)$mean  # Predecir el siguiente valor (rellenar)
+  return(forecasted)
+}
+
+# Rellenar valores extremos
+extremos$prediccion_arima <- mapply(fill_arima, list(series_temporales))
+
+# Sustituir los valores extremos con las predicciones ARIMA
+train_hora_filtrada$total <- ifelse(train_hora_filtrada$es_extremo == TRUE, extremos$prediccion_arima, train_hora_filtrada$total)
+
+# Reemplazar los valores procesados en el conjunto completo de datos
+train_hora <- train_hora %>%
+  left_join(train_hora_filtrada %>% select(fecha, total), by = "fecha") %>%
+  mutate(total = ifelse(is.na(total.y), total.x, total.y)) %>%
+  select(-total.x, -total.y)
+
+# Verificar el resultado
+head(train_hora)
+
+```
+
+```{r}
+# Resumen de valores nulos por columna
+colSums(is.na(train_hora))
+
+```
+
+```{r}
+# Cargar las librerías necesarias
+library(dplyr)
+library(lubridate)
+library(fable)
+library(tsibble)
+library(plotly)
+
+# Filtrar los datos hasta el 8 de abril del 2025
+train_hora_filtered <- train_hora %>% filter(fecha <= as.Date("2025-04-08"))
+
+# Crear una serie de tiempo (ts) con los datos filtrados (por ejemplo, ventas por hora)
+# Usaremos las ventas totales agrupadas por día
+daily_sales <- train_hora_filtered %>%
+  group_by(fecha) %>%
+  summarise(total_diario = sum(total, na.rm = TRUE)) %>%
+  as_tsibble(index = fecha)
+
+# Llenar los gaps en la serie temporal (fechas faltantes)
+daily_sales <- daily_sales %>%
+  fill_gaps()
+
+# Ajustar un modelo SNAIVE
+snaive_model <- daily_sales |> 
+  model(equipo_1 = SNAIVE(total_diario)) |> 
+  forecast(h = "30 days", level = c(80, 95))  # Añadir intervalos de confianza al 80% y 95%
+
+# Verificar la estructura del resultado del pronóstico
+snaive_model
+
+# Convertir el objeto de pronóstico a un data frame
+forecast_df <- as.data.frame(snaive_model)
+
+p <- snaive_model |> 
+  autoplot()  # Crear el gráfico de las predicciones con los intervalos de confianza
+
+# Convertirlo a un gráfico interactivo de plotly
+ggplotly(p, dynamicTicks = TRUE) |> 
+  rangeslider() |> 
+  layout(
+    title = "Predicción de ventas diarias (9 de abril - 8 de mayo de 2025)",
+    yaxis = list(fixedrange = FALSE),
+    xaxis = list(title = "Fecha")
+  )
+
+```
+
+```{r}
+write.csv(forecast_df, "pf.csv", row.names = FALSE)
+```
+
+```{r}
+save(forecast_df, file = "equipo_5.RData")
+```
+

@@ -1,0 +1,136 @@
+---
+title: "pf4"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(forecast)
+
+# Cargar el dataset
+cleandf <- read.csv("train_hora.csv")
+
+# Convertir la columna de fecha a formato datetime
+cleandf$fecha <- as.POSIXct(cleandf$fecha, format = "%d/%m/%Y %H:%M")
+
+# Crear una serie temporal, asegurando que la frecuencia sea por hora
+ts_data <- ts(cleandf$total, start = c(2020, 10, 8), frequency = 24)
+
+# Ajustar el modelo ARIMA con estacionalidad diaria (24 horas) y semanal (7 días)
+arima_model <- auto.arima(ts_data, seasonal = TRUE, 
+                          xreg = fourier(ts_data, K = 3), # Fourier para estacionalidades
+                          stepwise = FALSE, approximation = FALSE)
+
+# Realizar el pronóstico para el mes de abril de 2025 a mayo de 2025 (30 días)
+forecast_data <- forecast(arima_model, h = 30 * 24)  # Pronóstico de 30 días, considerando frecuencia horaria
+
+# Crear vector de fechas para los próximos 30 días
+predicted_dates <- seq(as.POSIXct("2025-04-09 00:00:00"), by = "hour", length.out = 30 * 24)
+
+# Ajustar las predicciones de acuerdo a las condiciones (domingos y horas específicas)
+predictions <- forecast_data$mean
+
+# Condición: poner a cero los domingos y las horas de 00:00 a 07:00 y 21:00 a 23:00
+for (i in 1:length(predictions)) {
+  if (weekdays(predicted_dates[i]) == "Sunday" || 
+      (as.numeric(format(predicted_dates[i], "%H")) >= 0 && as.numeric(format(predicted_dates[i], "%H")) <= 7) || 
+      (as.numeric(format(predicted_dates[i], "%H")) >= 21 && as.numeric(format(predicted_dates[i], "%H")) <= 23)) {
+    predictions[i] <- 0
+  }
+  
+  # Asegurarse de que las predicciones no sean negativas
+  if (predictions[i] < 0) {
+    predictions[i] <- 0
+  }
+}
+
+# Aplicar la transformación logarítmica: log(y + 1)
+predictions_log <- log(predictions + 1)
+
+# Guardar las predicciones ajustadas con logaritmo a un archivo CSV
+predictions_df <- data.frame(fecha = predicted_dates, predicciones_log = predictions_log)
+write.csv(predictions_df, "pronostico_ventas_arima_log_bootstrap.csv", row.names = FALSE)
+
+# Graficar el pronóstico ajustado con ARIMA y transformación logarítmica
+p <- autoplot(forecast_data) + 
+  labs(title = "Pronóstico de Ventas con ARIMA y Bootstrapping (Abril 9 - Mayo 8, 2025) Ajustado (Log Transform)", 
+       x = "Fecha", y = "Ventas (Transformadas)") +
+  theme_minimal()
+
+# Extraer los límites del intervalo de confianza del 80%
+lower_limit <- forecast_data$lower[,2]  # Límite inferior (80%)
+upper_limit <- forecast_data$upper[,2]  # Límite superior (80%)
+
+# Añadir la línea azul del intervalo de confianza al gráfico
+p + geom_ribbon(aes(x = predicted_dates, ymin = lower_limit, ymax = upper_limit), 
+                fill = "blue", alpha = 0.2) + 
+  ggtitle("Pronóstico de Ventas con Intervalo de Confianza del 80%") -> final_plot
+
+# Guardar la imagen del gráfico con la línea azul
+ggsave("pronostico_con_intervalo_80.png", final_plot, width = 10, height = 6)
+
+
+```
+
+```{r}
+# Instalar y cargar las librerías necesarias
+install.packages("tidyverse")
+install.packages("forecast")
+
+library(tidyverse)
+library(forecast)
+
+# Cargar el dataset
+cleandf <- read.csv("cleandf.csv")
+
+# Convertir la columna de fecha a formato datetime
+cleandf$fecha <- as.POSIXct(cleandf$fecha, format = "%d/%m/%Y %H:%M")
+
+# Crear una serie temporal, asegurando que la frecuencia sea por hora
+ts_data <- ts(cleandf$total, start = c(2020, 10, 8), frequency = 24)
+
+# Ajustar el modelo ARIMA con estacionalidad diaria (24 horas) y semanal (7 días)
+arima_model <- auto.arima(ts_data, seasonal = TRUE, 
+                          xreg = fourier(ts_data, K = 3), # Fourier para capturar la estacionalidad adicional
+                          stepwise = FALSE, approximation = FALSE)
+
+# Realizar el pronóstico para el mes de abril de 2025 a mayo de 2025 (30 días)
+forecast_data <- forecast(arima_model, h = 30 * 24)  # Pronóstico de 30 días, considerando frecuencia horaria
+
+# Crear vector de fechas para los próximos 30 días
+predicted_dates <- seq(as.POSIXct("2025-04-09 00:00:00"), by = "hour", length.out = 30 * 24)
+
+# Ajustar las predicciones de acuerdo a las condiciones
+predictions <- forecast_data$mean
+
+# Condición: poner a cero los domingos y las horas de 00:00 a 07:00 y 21:00 a 23:00
+for (i in 1:length(predictions)) {
+  # Verificar si es domingo (6 = domingo) y ajustar las horas de 00:00 a 07:00 y 21:00 a 23:00
+  if (weekdays(predicted_dates[i]) == "Sunday" || 
+      (as.numeric(format(predicted_dates[i], "%H")) >= 0 && as.numeric(format(predicted_dates[i], "%H")) <= 7) || 
+      (as.numeric(format(predicted_dates[i], "%H")) >= 21 && as.numeric(format(predicted_dates[i], "%H")) <= 23)) {
+    predictions[i] <- 0
+  }
+  
+  # Asegurarse de que las predicciones no sean negativas
+  if (predictions[i] < 0) {
+    predictions[i] <- 0
+  }
+}
+
+# Aplicar la transformación logarítmica: log(y + 1)
+predictions_log <- log(predictions + 1)
+
+# Guardar las predicciones ajustadas con logaritmo a un archivo CSV
+predictions_df <- data.frame(fecha = predicted_dates, predicciones_log = predictions_log)
+write.csv(predictions_df, "pronostico_ventas_arima_log_transformado.csv", row.names = FALSE)
+
+# Graficar el pronóstico ajustado con ARIMA y transformación logarítmica
+autoplot(forecast_data) + 
+  labs(title = "Pronóstico de Ventas con ARIMA (Abril 9 - Mayo 8, 2025) Ajustado (Log Transform)", 
+       x = "Fecha", y = "Ventas (Transformadas)") +
+  theme_minimal()
+
+```
+

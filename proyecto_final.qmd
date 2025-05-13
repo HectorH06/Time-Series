@@ -1,0 +1,254 @@
+---
+title: "Proyecto final"
+subtitle: "Series de tiempo"
+date: 2025-05-09
+format: 
+  revealjs:
+    preview-links: true
+    df-print: default
+    scrollable: true
+---
+
+# Presentación del proyecto final
+
+## Formatos
+
+:::{.callout-tip}
+La documentación para cada tipo de formato está en la página oficial de [Quarto](https://quarto.org/docs/presentations/).
+
+:::
+
+Documento de Quarto renderizado con formato:
+
+* Idealmente [revealjs](https://quarto.org/docs/presentations/revealjs/) (como este documento)
+* [dashboard](https://quarto.org/docs/dashboards/layout.html)
+* [pptx](https://quarto.org/docs/presentations/powerpoint.html) (PowerPoint)
+
+
+
+## Paqueterías
+
+```{r}
+#| message: false
+#| echo: true
+
+library(tidyverse)
+library(tsibble)
+library(feasts)
+library(fable)
+library(plotly)
+library(patchwork)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+# Data
+
+## Información cualitativa de la tienda
+
+- Tienda Delicatessen
+- vende principalmente embutidos (carnes frías) y quesos y productos derivados de ello (charolas de carnes frías/quesos, baguettes, etc.).
+- Tiene horario de lunes a viernes de 10:00 a 19:00 horas y sábados de 10:00 a 15:00 horas (cerrada los domingos).
+- La tienda está ubicada dentro la zona metropolitana de Guadalajara.
+
+## Importar los datos
+
+Importar los datos a R utilizando `load()`:
+
+```{r}
+#| echo: true
+
+load("proyecto_final.RData")
+train_hora
+```
+
+:::{callout-note}
+La `tsibble` cuenta con información:
+
+- `fecha`: de fecha/hora
+- `folio`: cantidad de tickets de venta por hora
+- `total`: las ventas totales por hora (en pesos)
+:::
+
+## Ventas por hora de la tienda
+
+```{r}
+p <- train_hora |> 
+  autoplot(total)
+
+ggplotly(p, dynamicTicks = TRUE) |> 
+  rangeslider() |> 
+  layout(
+    yaxis = list(fixedrange = FALSE)
+  )
+```
+
+# Proyecto
+
+## Pronóstico
+
+- Se debe realizar el pronóstico de las ventas por hora de la tienda para el siguiente mes (del 9 de abril de 2025 al 8 de mayo de 2025).
+- Se debe entregar un solo pronóstico (ustedes pueden realizar varios modelos previos, pero solo deben entregar un solo valor para cada hora).
+- Se evaluarán los pronósticos de cada equipo vs. el valor real.
+- Pueden ustedes separar los datos en train/test para evaluar sus modelos, pero al final deben producir un pronóstico hacia el futuro, en las fechas mencionadas arriba.
+
+
+# Entregables
+
+## Entregables
+
+- Documento de Quarto (`.qmd`) en donde hayan realizado su trabajo.
+- Presentación (el render de su documento de Quarto).
+- Archivo `.RData` que contenga su `fable` (tabla de pronósticos) final.
+
+## Sobre el `.RData`
+
+- Cuando realicen el pronóstico final, deben guardar su `fable` con el nombre de su equipo en canvas. Asimismo, el nombre del modelo debe ser el nombre de su equipo. Ejemplo:
+
+```{r}
+#| echo: true
+#| code-line-numbers: "1,2"
+
+equipo_1 <- train_hora |> 
+  model(equipo_1 = SNAIVE(total)) |> 
+  forecast(h = "1 month")
+
+equipo_1
+```
+
+```{r}
+equipo_1 |> 
+  autoplot(train_hora |> filter_index("2025-02-01" ~ .))
+```
+
+
+- Para exportar el archivo, se debe utilizar la función `save()`:
+
+```{r}
+#| echo: true
+
+save(equipo_1, file = "equipo_1.RData")
+```
+
+# Consejos
+
+## Transformaciones
+
+- Los datos presentan varias horas en cero (posiblemente cuando está cerrada la tienda). Hay transformaciones que **"truenan"** con ceros (como logaritmos).
+
+- Se pueden utilizar alternativas. En vez de utilizar la transformación $w = log(y)$, se puede utilizar:
+
+$$
+w = log(y + 1)
+$$
+
+## Estacionalidad
+
+- Es probable que la serie presente estacionalidad (incluso más de un tipo de estacionalidad).
+- Considerarlas todas puede ayudar a su modelo.
+
+## Outliers y festivos
+
+- La tienda de repente atiende eventos (bodas, inauguraciones, etc.), lo cual puede alterar drásticamente la venta en algún día/hora.
+- Los días festivos pueden impactar las ventas, incluso días antes.
+- La tienda puede o no estar abierta en el mero día festivo.
+
+
+
+
+# TEMPO
+
+## Detección de outliers e imputación con ARIMA
+
+```{r outlier_impute, message=FALSE, warning=FALSE}
+# 1. Calcular Q1, Q3 e IQR manualmente
+qnts <- train_hora %>%
+  summarise(
+    Q1 = quantile(total, 0.25, na.rm = TRUE),
+    Q3 = quantile(total, 0.75, na.rm = TRUE)
+  )
+iqr   <- qnts$Q3 - qnts$Q1
+upper <- qnts$Q3 + 1.5 * iqr
+```
+
+```{r}
+# 2. Reemplazar outliers por NA
+train_hora <- train_hora %>%
+  mutate(
+    total_clean = if_else(total > upper, NA_real_, total)
+  )
+```
+
+```{r}
+# 3. Ajustar ARIMA sobre la serie con NA
+fit_arima <- train_hora %>%
+  model(arima = ARIMA(total_clean))
+```
+
+```{r}
+# 4. Extraer valores ajustados (.fitted) y usarlos para imputar
+imputados <- fit_arima %>%
+  augment() %>%
+  select(fecha, .fitted)
+
+train_hora <- train_hora %>%
+  left_join(imputados, by = "fecha") %>%
+  mutate(
+    total_imp = if_else(is.na(total_clean), .fitted, total_clean)
+  ) %>%
+  select(-.fitted)
+```
+
+```{r}
+# 5. Visualizar serie original, con NAs y la imputada
+p1 <- train_hora %>% autoplot(total,    colour = "gray70") + ggtitle("Original")
+p2 <- train_hora %>% autoplot(total_clean,   colour = "orange") + ggtitle("Con NAs")
+p3 <- train_hora %>% autoplot(total_imp, colour = "steelblue") + ggtitle("Imputada con ARIMA")
+```
+
+```{r}
+p1 / p2 / p3
+```
+
+## Estadísticas por hora: max, min, media aritmética, geométrica y armónica
+
+```{r hourly_stats_plot, message=FALSE, warning=FALSE}
+
+
+# 1. Calcular estadísticas por hora
+hourly_stats <- train_hora %>%
+  mutate(hour = hour(fecha)) %>%
+  group_by(hour) %>%
+  summarise(
+    max_val   = max(total, na.rm = TRUE),
+    min_val   = min(total, na.rm = TRUE),
+    mean_ari  = mean(total, na.rm = TRUE),
+    # Geométrica: excluye ceros
+    mean_geo  = exp(mean(log(total[total > 0]), na.rm = TRUE)),
+    # Armónica: excluye ceros
+    mean_har  = length(total[total > 0]) / sum(1 / total[total > 0], na.rm = TRUE)
+  ) %>%
+  pivot_longer(
+    cols = -hour,
+    names_to  = "estatístico",
+    values_to = "valor"
+  )
+
+# 2. Gráfica multi-línea
+ggplot(hourly_stats, aes(x = hour, y = valor, color = estatístico)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = 0:23) +
+  labs(
+    title = "Estadísticas de ventas por hora del día",
+    x     = "Hora del día",
+    y     = "Ventas (pesos)",
+    color = "Estadístico"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x      = element_text(angle = 90, vjust = 0.5)
+  )
+```

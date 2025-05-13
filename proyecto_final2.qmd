@@ -1,0 +1,133 @@
+---
+title: "proy_final"
+author: "Remi"
+format: html
+editor: visual
+---
+
+## Estadísticas por hora usando `proyecto_final.RData`
+
+```{r hourly_stats_plot, message=FALSE, warning=FALSE}
+## Estadísticas por hora usando `proyecto_final.RData` (corregido)
+
+# 0. Cargar datos
+load("proyecto_final.RData")    # crea el objeto train_hora
+
+# 1. Paquetes necesarios
+library(dplyr)
+library(lubridate)
+library(tsibble)
+library(ggplot2)
+
+# 2. Asegurar que 'fecha' sea POSIXct
+train_hora <- train_hora %>%
+  mutate(fecha = as_datetime(fecha))
+
+# 3. Calcular estadísticas por hora
+hourly_stats <- train_hora %>%
+  mutate(hour = hour(fecha)) %>%
+  group_by(hour) %>%
+  summarise(
+    max_val  = max(total, na.rm = TRUE),
+    min_val  = min(total, na.rm = TRUE),
+    mean_ari = mean(total, na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
+  pivot_longer(
+    cols      = c(max_val, min_val, mean_ari),
+    names_to  = "estadístico",
+    values_to = "valor"
+  )
+
+# 4. Graficar
+ggplot(hourly_stats, aes(x = hour, y = valor, color = estadístico)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = 0:23) +
+  labs(
+    title = "Ventas por hora",
+    x     = "Hora del día",
+    y     = "Folios",
+    color = "Estadístico"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x      = element_text(angle = 90, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+```
+
+
+
+## One‐hot encoding de la hora del día
+
+Antes de calcular cualquier estadístico puedes crear variables dummy (0/1) para cada hora:
+
+```{r hourly_dummies, message=FALSE, warning=FALSE}
+library(dplyr)
+library(lubridate)
+library(tidyr)
+
+train_hora <- train_hora %>%
+  mutate(
+    hour = hour(fecha),    # extrae la hora de 'fecha'
+    dummy = 1              # marcador para pivot
+  ) %>%
+  pivot_wider(
+    names_from   = hour,               # toma valores 0:23
+    values_from  = dummy,              # el valor a rellenar
+    values_fill  = list(dummy = 0),    # rellena con 0 donde no hay marcador
+    names_prefix = "hour_"             # crea columnas hour_0 … hour_23
+  )
+
+# Verifica las primeras filas
+head(train_hora)
+```
+
+```{r}
+tail(train_hora)
+```
+
+
+
+## Cálculo de quintiles por hora utilizando las dummies
+```{r}
+colnames(train_hora)
+```
+
+## Cálculo global de quintiles para cada hora (de `hour_0` a `hour_23`)
+
+```{r global_quintiles_by_hour, message=FALSE, warning=FALSE}
+# 2. Seleccionar las columnas relevantes (total + hour_0 to hour_23)
+hour_columns <- grep("^hour_", colnames(train_hora), value = TRUE)
+
+# 3. Calculamos los quintiles globales para cada hora del día
+hourly_quintiles <- train_hora %>%
+  select(total, all_of(hour_columns)) %>%
+  # Para cada hora, seleccionamos las filas donde la columna de la hora correspondiente es 1
+  pivot_longer(
+    cols = all_of(hour_columns),
+    names_to = "hour_dummy",
+    values_to = "flag"
+  ) %>%
+  filter(flag == 1) %>%  # Filtramos solo las filas donde la hora está activa
+  group_by(hour_dummy) %>%
+  summarise(
+    `0%`   = quantile(total, 0.00, na.rm = TRUE),
+    `20%`  = quantile(total, 0.20, na.rm = TRUE),
+    `40%`  = quantile(total, 0.40, na.rm = TRUE),
+    `60%`  = quantile(total, 0.60, na.rm = TRUE),
+    `80%`  = quantile(total, 0.80, na.rm = TRUE),
+    `100%` = quantile(total, 1.00, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    hour = as.integer(gsub("hour_", "", hour_dummy))  # Extraemos la hora del nombre de la columna
+  ) %>%
+  select(hour, `0%`, `20%`, `40%`, `60%`, `80%`, `100%`)  # Organizar la tabla final
+
+# 4. Mostrar la tabla de quintiles globales por hora
+hourly_quintiles
+
+
+```
